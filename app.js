@@ -1,12 +1,20 @@
 /* ============================================================
-   AlphaMapping — app.js
-   Data pipeline: /api/serp (Vercel) → SerpAPI → Groq classify
+   AlphaMapping — app.js  v3
+   Fixes:
+   1. Department mode → deep-drill that dept only (all levels)
+   2. Full map mode  → leadership only (C-suite → Managers)
+   3. LinkedIn links on unverified profiles
+   4. Large company cap (500+ employees) with user notice
    ============================================================ */
 
 const GROQ_API = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_KEY = 'YOUR_GROQ_API_KEY'; // ← your key from console.groq.com
 
-// Only Groq key goes here — SERP_KEY lives in Vercel env vars, never in this file
-const GROQ_KEY = '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'; // ← replace with your key from console.groq.com
+/* ── Limits ── */
+const MAX_QUERIES_FULL_MAP  = 8;   // leadership-only mode  → ~8 searches
+const MAX_QUERIES_DEPT_MAP  = 6;   // department-focus mode → ~6 searches
+const LARGE_COMPANY_SIZES   = ['Large (1000+)', 'Enterprise (5000+)'];
+const PROFILE_CAP           = 80;  // max profiles sent to Groq in one call
 
 /* ─── State ─── */
 let S = { user: null, paid: false, plan: 'starter', co: {}, map: null };
@@ -29,8 +37,9 @@ function toast(msg, type = 'ok') {
     ? `<span style="color:#EF4444">✕</span> ${msg}`
     : `<span style="color:var(--teal)">✓</span> ${msg}`;
   if (type === 'error') el.style.borderLeftColor = '#EF4444';
+  if (type === 'warn')  el.style.borderLeftColor = '#F59E0B';
   wrap.appendChild(el);
-  setTimeout(() => el.remove(), 4000);
+  setTimeout(() => el.remove(), 5000);
 }
 
 function toggleMode(m) {
@@ -45,49 +54,42 @@ function showView(v) {
   document.getElementById('view-' + v).style.display = 'block';
 }
 
-function goBack(v) {
-  showView(v);
-  setStep(v === 'form' ? 1 : 2);
-}
+function goBack(v) { showView(v); setStep(v === 'form' ? 1 : 2); }
 
 function setStep(n) {
   for (let i = 1; i <= 3; i++) {
     const dot = document.getElementById('sd' + i);
     const lbl = document.getElementById('sl' + i);
-    if (i < n)       { dot.className = 'asb-dot done';    dot.innerHTML = '✓'; lbl.className = 'asb-label'; }
-    else if (i === n){ dot.className = 'asb-dot active';  dot.innerHTML = i;   lbl.className = 'asb-label active'; }
-    else             { dot.className = 'asb-dot pending'; dot.innerHTML = i;   lbl.className = 'asb-label'; }
+    if (i < n)        { dot.className = 'asb-dot done';    dot.innerHTML = '✓'; lbl.className = 'asb-label'; }
+    else if (i === n) { dot.className = 'asb-dot active';  dot.innerHTML = i;   lbl.className = 'asb-label active'; }
+    else              { dot.className = 'asb-dot pending'; dot.innerHTML = i;   lbl.className = 'asb-label'; }
   }
 }
 
-/* Loading step animator */
-let _stepIdx = 0;
-let _stepTimer = null;
+function setProgress(pct) {
+  document.getElementById('ld-bar').style.width = Math.min(pct, 95) + '%';
+}
+
+let _stepIdx = 0, _stepTimer = null;
 
 function startLoadSteps(labels) {
   _stepIdx = 0;
   if (_stepTimer) clearInterval(_stepTimer);
-
   function tick() {
-    // mark previous done
     if (_stepIdx > 0) {
       const prev = document.getElementById('ls' + (_stepIdx - 1));
       const icon = document.getElementById('li' + (_stepIdx - 1));
       if (prev) { prev.classList.remove('active'); prev.classList.add('done'); }
       if (icon) icon.innerHTML = '✓';
     }
-    // activate current
     const cur = document.getElementById('ls' + _stepIdx);
     if (cur) cur.classList.add('active');
     const sub = document.getElementById('ld-sub');
     if (sub && labels[_stepIdx]) sub.textContent = labels[_stepIdx];
     _stepIdx++;
   }
-
-  tick(); // first step immediately
-  _stepTimer = setInterval(() => {
-    if (_stepIdx < labels.length) tick();
-  }, 2500);
+  tick();
+  _stepTimer = setInterval(() => { if (_stepIdx < labels.length) tick(); }, 2800);
 }
 
 function doneLoadSteps(total) {
@@ -101,10 +103,6 @@ function doneLoadSteps(total) {
   document.getElementById('ld-bar').style.width = '100%';
 }
 
-function setProgress(pct) {
-  document.getElementById('ld-bar').style.width = Math.min(pct, 95) + '%';
-}
-
 /* ================================================================
    AUTH
 ================================================================ */
@@ -112,16 +110,12 @@ function doAuth(mode) {
   let name, email;
   if (mode === 'login') {
     email = document.getElementById('li-email').value.trim();
-    if (!email || !document.getElementById('li-pass').value) {
-      toast('Please fill in all fields', 'error'); return;
-    }
+    if (!email || !document.getElementById('li-pass').value) { toast('Please fill in all fields', 'error'); return; }
     name = email.split('@')[0];
   } else {
     name  = document.getElementById('su-name').value.trim();
     email = document.getElementById('su-email').value.trim();
-    if (!name || !email || !document.getElementById('su-pass').value) {
-      toast('Please fill in all fields', 'error'); return;
-    }
+    if (!name || !email || !document.getElementById('su-pass').value) { toast('Please fill in all fields', 'error'); return; }
   }
   S.user = { name, email };
   document.getElementById('topbar-right').innerHTML = `
@@ -171,96 +165,118 @@ function doPay() {
 }
 
 /* ================================================================
-   X-RAY SEARCH  →  /api/serp  (Vercel serverless, holds SERP_KEY)
+   X-RAY QUERY BUILDER
+   Two modes:
+   A) Department mode  — drill deep into one dept (all seniority levels)
+   B) Full map mode    — leadership only across all depts (no junior staff)
 ================================================================ */
 
-function buildXrayQueries(coName) {
+function buildDeptQueries(coName, dept) {
+  /* Deep drill into a specific department — all levels from head to IC */
   const q = `"${coName}"`;
+  const d = `"${dept}"`;
   return [
-    `site:linkedin.com/in ${q} "CEO" OR "Co-Founder" OR "Founder" OR "Chief Executive"`,
-    `site:linkedin.com/in ${q} "CTO" OR "Chief Technology" OR "CPO" OR "Chief Product"`,
-    `site:linkedin.com/in ${q} "CFO" OR "COO" OR "Chief Financial" OR "Chief Operating"`,
-    `site:linkedin.com/in ${q} "VP" OR "Vice President" "Engineering" OR "Product" OR "Technology"`,
-    `site:linkedin.com/in ${q} "VP" OR "Vice President" "Sales" OR "Marketing" OR "Revenue" OR "Growth"`,
-    `site:linkedin.com/in ${q} "VP" OR "Vice President" "People" OR "HR" OR "Operations" OR "Finance"`,
-    `site:linkedin.com/in ${q} "Director" "Engineering" OR "Product" OR "Design" OR "Technology"`,
-    `site:linkedin.com/in ${q} "Director" "Sales" OR "Marketing" OR "Customer Success" OR "Finance"`,
-    `site:linkedin.com/in ${q} "Engineering Manager" OR "Senior Manager" OR "Product Manager"`,
-    `site:linkedin.com/in ${q} "Manager" "Sales" OR "Marketing" OR "Operations" OR "HR"`,
-  ];
+    // Top of dept
+    `site:linkedin.com/in ${q} ${d} ("Head of" OR "VP" OR "Vice President" OR "Director")`,
+    // Senior ICs and managers in dept
+    `site:linkedin.com/in ${q} ${d} ("Senior Manager" OR "Manager" OR "Lead" OR "Principal")`,
+    // Mid-level in dept
+    `site:linkedin.com/in ${q} ${d} ("Senior" OR "Staff" OR "Engineer" OR "Specialist" OR "Analyst")`,
+    // All roles in dept — catch remaining
+    `site:linkedin.com/in ${q} ${d}`,
+    // Common dept aliases
+    `site:linkedin.com/in ${q} "${dept} Manager" OR "${dept} Lead" OR "${dept} Director"`,
+    // Extra catch with company name only + dept keyword without quotes
+    `site:linkedin.com/in ${q} ${dept} "currently" OR "present"`,
+  ].slice(0, MAX_QUERIES_DEPT_MAP);
 }
 
-/* Call /api/serp — our Vercel serverless function */
+function buildFullMapQueries(coName) {
+  /* Leadership-only map — no junior/IC roles to keep it manageable */
+  const q = `"${coName}"`;
+  return [
+    // C-Suite
+    `site:linkedin.com/in ${q} ("CEO" OR "Chief Executive" OR "Co-Founder" OR "Founder" OR "Managing Director")`,
+    `site:linkedin.com/in ${q} ("CTO" OR "Chief Technology" OR "CPO" OR "Chief Product" OR "CISO" OR "CMO")`,
+    `site:linkedin.com/in ${q} ("CFO" OR "COO" OR "Chief Financial" OR "Chief Operating" OR "Chief Revenue")`,
+    // VP Level
+    `site:linkedin.com/in ${q} ("VP" OR "Vice President") ("Engineering" OR "Product" OR "Technology" OR "Design")`,
+    `site:linkedin.com/in ${q} ("VP" OR "Vice President") ("Sales" OR "Marketing" OR "Revenue" OR "Growth" OR "Business")`,
+    `site:linkedin.com/in ${q} ("VP" OR "Vice President") ("People" OR "HR" OR "Operations" OR "Finance" OR "Legal")`,
+    // Directors
+    `site:linkedin.com/in ${q} ("Director of" OR "Senior Director") ("Engineering" OR "Product" OR "Sales" OR "Marketing")`,
+    // Managers
+    `site:linkedin.com/in ${q} ("Engineering Manager" OR "Product Manager" OR "Sales Manager" OR "Senior Manager")`,
+  ].slice(0, MAX_QUERIES_FULL_MAP);
+}
+
+/* ================================================================
+   SERP CALL  →  /api/serp
+================================================================ */
 async function serpSearch(query) {
   const res = await fetch('/api/serp', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ query }),
   });
-
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Proxy error ${res.status}`);
   }
-
   const data = await res.json();
   if (data.error) throw new Error('SerpAPI: ' + data.error);
   return data.organic_results || [];
 }
 
-/* Parse a Google result into a profile object */
+/* ================================================================
+   RESULT PARSER
+================================================================ */
 function parseResult(result, coName) {
   const url     = result.link    || '';
   const title   = result.title   || '';
   const snippet = result.snippet || '';
 
-  // Must be a real /in/ profile URL
   if (!url.includes('linkedin.com/in/')) return null;
 
-  // Name is before the first " - " or " | " in the title
+  // Name: everything before first " - " or " | "
   const nameMatch = title.match(/^([^|\-–]+?)(?:\s*[-–]|\s*\|)/);
   if (!nameMatch) return null;
   const name = nameMatch[1].trim();
-  if (!name || name.length < 3) return null;
+  if (!name || name.length < 3 || name.toLowerCase() === 'linkedin') return null;
 
-  // Role: "Name - ROLE at Company | LinkedIn"
+  // Role from title: "Name - ROLE at Company | LinkedIn"
   let role = '';
-  const roleMatch = title.match(/[-–]\s*(.+?)\s+at\s+/i);
-  if (roleMatch) role = roleMatch[1].trim();
+  const roleAtMatch = title.match(/[-–]\s*(.+?)\s+at\s+/i);
+  if (roleAtMatch) role = roleAtMatch[1].trim();
 
-  // Fallback: grab role from snippet
+  // Fallback: role from snippet
   if (!role) {
-    const snipMatch = snippet.match(/\b(CEO|CTO|CFO|COO|CPO|VP|Vice President|Director|Manager|Head of|Lead|Founder|Engineer)[^.,$]{0,60}/i);
+    const snipMatch = snippet.match(/\b(CEO|CTO|CFO|COO|CPO|CMO|CRO|VP|Vice President|SVP|EVP|Director|Senior Director|Manager|Senior Manager|Engineering Manager|Product Manager|Head of|Lead|Principal|Founder|Co-Founder|Partner)[^.,$\n]{0,80}/i);
     if (snipMatch) role = snipMatch[0].trim();
   }
 
   if (!role) role = 'Employee';
 
-  // Company name must appear somewhere in title or snippet
+  // Company must appear in title or snippet
   const combined = (title + ' ' + snippet).toLowerCase();
   if (!combined.includes(coName.toLowerCase())) return null;
 
-  // Clean LinkedIn URL
-  const linkedinUrl = url.split('?')[0].replace(/\/$/, '');
-  const linkedinPath = linkedinUrl.replace('https://www.', '').replace('https://', '');
+  // Clean URL — keep full linkedin path, strip query params
+  const cleanUrl    = url.split('?')[0].replace(/\/$/, '');
+  const linkedinPath = cleanUrl.replace('https://www.', '').replace('https://', '');
 
-  return {
-    name,
-    role,
-    linkedin: linkedinPath,
-    context:  snippet.substring(0, 150),
-  };
+  return { name, role, linkedin: linkedinPath, context: snippet.substring(0, 160) };
 }
 
-/* Run all queries, deduplicate by LinkedIn URL */
-async function collectProfiles(coName) {
-  const queries  = buildXrayQueries(coName);
+/* ================================================================
+   COLLECT PROFILES — run queries, deduplicate
+================================================================ */
+async function collectProfiles(coName, queries) {
   const seen     = new Set();
   const profiles = [];
 
   for (let i = 0; i < queries.length; i++) {
     setProgress(5 + (i / queries.length) * 55);
-
     try {
       const results = await serpSearch(queries[i]);
       for (const r of results) {
@@ -271,68 +287,118 @@ async function collectProfiles(coName) {
       }
     } catch (e) {
       console.warn(`Query ${i + 1} failed:`, e.message);
-      // keep going — don't fail the whole map for one bad query
     }
-
-    // small pause between requests
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 350));
   }
 
   return profiles;
 }
 
 /* ================================================================
-   GROQ — classify real scraped profiles into org levels
+   GROQ CLASSIFICATION
+   Two prompt modes — dept drill vs leadership map
 ================================================================ */
-async function classifyWithGroq(profiles, coName, coInd) {
-  if (!profiles.length) throw new Error('No profiles found for this company. Try a more well-known company name.');
+async function classifyWithGroq(profiles, coName, coInd, deptMode) {
+  if (!profiles.length) {
+    throw new Error(`No LinkedIn profiles found for "${coName}". Check the company name matches LinkedIn exactly.`);
+  }
 
-  const list = profiles
+  // Cap to avoid token overflow
+  const capped   = profiles.slice(0, PROFILE_CAP);
+  const wasCapped = profiles.length > PROFILE_CAP;
+
+  const list = capped
     .map((p, i) => `${i + 1}. Name: "${p.name}" | Role: "${p.role}" | LinkedIn: ${p.linkedin} | Context: ${p.context}`)
     .join('\n');
 
-  const prompt = `You are a talent analyst. These are REAL LinkedIn profiles scraped from Google for employees at "${coName}" (${coInd} industry).
+  let prompt;
 
-Classify each profile into the correct org level and return clean structured JSON.
+  if (deptMode) {
+    /* ── Department drill mode ─────────────────────────────────
+       Return ALL levels within that department — from head to IC.
+       Structure by seniority within the dept, not by company level. */
+    prompt = `You are a talent analyst. These are REAL LinkedIn profiles for people at "${coName}" in or related to the "${deptMode}" department.
+
+Your job: classify ALL of them into a department hierarchy and return structured JSON.
+
+PROFILES:
+${list}
+
+CLASSIFICATION RULES for department "${deptMode}":
+- deptHead    → Most senior person in this dept: VP, Head of, Director (most senior), SVP, EVP
+- seniorLevel → Senior Manager, Principal, Senior Director, Staff-level, Senior IC
+- midLevel    → Manager, Team Lead, Lead, Mid-level IC, Engineer/Analyst/Specialist (no "Senior" prefix)
+- juniorLevel → Junior, Associate, Intern, Entry-level, Coordinator, Fresher
+- unverified  → You are less than 60% sure they work at "${coName}" in "${deptMode}"
+
+For EVERY profile output these fields:
+- name: clean full name
+- title: their exact role/title
+- department: "${deptMode}" (or closest sub-department)
+- linkedin: EXACT URL as provided — do NOT omit this
+- confidence: integer 0-100
+
+Unverified entries must also include:
+- note: brief reason why uncertain
+- linkedin: EXACT URL as provided — always include even for unverified
+
+Return ONLY raw JSON, no markdown:
+{
+  "mode": "department",
+  "department": "${deptMode}",
+  "deptHead":    [{"name":"","title":"","department":"","linkedin":"","confidence":0}],
+  "seniorLevel": [{"name":"","title":"","department":"","linkedin":"","confidence":0}],
+  "midLevel":    [{"name":"","title":"","department":"","linkedin":"","confidence":0}],
+  "juniorLevel": [{"name":"","title":"","department":"","linkedin":"","confidence":0}],
+  "unverified":  [{"name":"","title":"","department":"","linkedin":"","confidence":0,"note":""}]
+}`;
+
+  } else {
+    /* ── Full leadership map mode ──────────────────────────────
+       Return only leadership (C-suite → Managers). No junior/IC staff. */
+    prompt = `You are a talent analyst. These are REAL LinkedIn profiles for leaders at "${coName}" (${coInd} industry).
+
+Classify each into the correct leadership level. DO NOT include junior or individual contributor profiles.
 
 PROFILES:
 ${list}
 
 CLASSIFICATION RULES:
-- cSuite → CEO, CTO, CFO, COO, CPO, CMO, CRO, CISO, Founder, Co-Founder, Managing Director
-- vpLevel → VP, Vice President, SVP, EVP, Head of (senior/global scope)
+- cSuite    → CEO, CTO, CFO, COO, CPO, CMO, CRO, CISO, Founder, Co-Founder, Managing Director, President
+- vpLevel   → VP, Vice President, SVP, EVP, Head of (with global/company-wide scope)
 - directors → Director, Senior Director, Associate Director
-- managers → Manager, Senior Manager, Engineering Manager, Product Manager, Team Lead, Lead
-- unverified → unclear title, not enough context, or you are less than 60% sure they currently work at ${coName}
+- managers  → Manager, Senior Manager, Engineering Manager, Product Manager, Team Lead
+- unverified → unclear title, insufficient context, or confidence below 60%
 
-For each profile output:
+For EVERY profile output:
 - name: clean full name
 - title: their exact role/title
 - department: one of Engineering / Product / Sales / Marketing / HR / Finance / Design / Customer Success / Legal / Operations / Other
-- linkedin: exact URL as provided
-- confidence: integer 0-100 (how sure you are this is a current ${coName} employee at that level)
+- linkedin: EXACT URL as provided — do NOT omit or change
+- confidence: integer 0-100
 
-Profiles with confidence below 60 → put in unverified with a brief note field.
+Unverified entries must also include:
+- note: brief reason
+- linkedin: EXACT URL as provided — always include
 
-Return ONLY raw JSON, no markdown, no explanation:
+Return ONLY raw JSON, no markdown:
 {
+  "mode": "full",
   "cSuite":    [{"name":"","title":"","department":"","linkedin":"","confidence":0}],
   "vpLevel":   [{"name":"","title":"","department":"","linkedin":"","confidence":0}],
   "directors": [{"name":"","title":"","department":"","linkedin":"","confidence":0}],
   "managers":  [{"name":"","title":"","department":"","linkedin":"","confidence":0}],
-  "unverified":[{"name":"","title":"","confidence":0,"note":""}]
+  "unverified":[{"name":"","title":"","department":"","linkedin":"","confidence":0,"note":""}]
 }`;
+  }
 
   const res = await fetch(GROQ_API, {
-    method:  'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': 'Bearer ' + GROQ_KEY,
-    },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + GROQ_KEY },
     body: JSON.stringify({
       model:       'llama-3.3-70b-versatile',
       messages:    [{ role: 'user', content: prompt }],
-      max_tokens:  3000,
+      max_tokens:  3500,
       temperature: 0.1,
     }),
   });
@@ -342,8 +408,10 @@ Return ONLY raw JSON, no markdown, no explanation:
 
   let raw = data.choices?.[0]?.message?.content || '{}';
   raw = raw.replace(/```json|```/g, '').trim();
-
-  return JSON.parse(raw);
+  const result = JSON.parse(raw);
+  result._wasCapped = wasCapped;
+  result._totalFound = profiles.length;
+  return result;
 }
 
 /* ================================================================
@@ -355,50 +423,71 @@ async function startMapping() {
   const desc = document.getElementById('co-desc').value.trim();
   if (!name || !ind || !desc) { toast('Please fill in required fields', 'error'); return; }
 
-  S.co = {
-    name, ind,
-    size: document.getElementById('co-size').value,
-    hq:   document.getElementById('co-hq').value.trim(),
-    desc,
-    dept: document.getElementById('co-dept').value.trim(),
-  };
+  const size = document.getElementById('co-size').value;
+  const dept = document.getElementById('co-dept').value.trim();
+
+  S.co = { name, ind, size, hq: document.getElementById('co-hq').value.trim(), desc, dept };
+
+  // ── Large company warning ──────────────────────────────────
+  if (LARGE_COMPANY_SIZES.includes(size) && !dept) {
+    toast(
+      `⚠️ ${name} is a large organisation. Without a department filter, results are limited to leadership (C-Suite → Managers) to keep this fast and accurate. Add a department for deeper mapping.`,
+      'warn'
+    );
+  }
 
   showView('loading');
   setStep(2);
-  document.getElementById('ld-title').textContent = 'Mapping ' + name + '...';
+  document.getElementById('ld-title').textContent = dept
+    ? `Mapping ${dept} team at ${name}...`
+    : `Mapping leadership at ${name}...`;
 
   startLoadSteps([
-    'Building X-ray search queries',
+    'Building targeted X-ray search queries',
     'Running Google X-ray searches via SerpAPI',
-    'Collecting LinkedIn profiles from results',
-    'Deduplicating and cleaning data',
+    'Collecting real LinkedIn profiles',
+    'Deduplicating and cleaning results',
     'AI classifying org hierarchy',
     'Rendering talent map',
   ]);
 
   try {
-    // ── Phase 1: Real X-ray search ──────────────────────────
-    const rawProfiles = await collectProfiles(name);
+    // ── Build queries based on mode ──────────────────────────
+    const queries = dept
+      ? buildDeptQueries(name, dept)
+      : buildFullMapQueries(name);
+
+    // ── Run X-ray searches ───────────────────────────────────
+    const rawProfiles = await collectProfiles(name, queries);
     setProgress(65);
 
     if (!rawProfiles.length) {
-      throw new Error(`No LinkedIn profiles found for "${name}". Make sure the company name is spelled exactly as it appears on LinkedIn.`);
+      throw new Error(`No LinkedIn profiles found for "${name}". Make sure the company name matches LinkedIn exactly (e.g. "Razorpay" not "Razorpay Inc").`);
     }
 
-    // ── Phase 2: Groq classification ────────────────────────
-    setProgress(75);
-    const structured = await classifyWithGroq(rawProfiles, name, ind);
+    // ── Classify with Groq ───────────────────────────────────
+    setProgress(78);
+    const structured = await classifyWithGroq(rawProfiles, name, ind, dept || null);
     setProgress(95);
 
     doneLoadSteps(6);
     S.map = structured;
+
+    // Notify if results were capped
+    if (structured._wasCapped) {
+      toast(
+        `Large company detected — results capped at ${PROFILE_CAP} profiles for speed. Use the department filter for a more focused map.`,
+        'warn'
+      );
+    }
+
     setTimeout(() => renderResults(), 400);
 
   } catch (err) {
     if (_stepTimer) clearInterval(_stepTimer);
     console.error(err);
-    document.getElementById('ld-title').textContent   = 'Something went wrong';
-    document.getElementById('ld-sub').textContent     = err.message;
+    document.getElementById('ld-title').textContent    = 'Something went wrong';
+    document.getElementById('ld-sub').textContent      = err.message;
     document.getElementById('ld-bar').style.background = '#EF4444';
     toast(err.message, 'error');
   }
@@ -407,29 +496,50 @@ async function startMapping() {
 /* ================================================================
    RENDER
 ================================================================ */
-const LEVELS = {
+
+/* Leadership map levels */
+const FULL_LEVELS = {
   cSuite:    { label: 'C-Suite & Executive Leadership', cls: 'lv-c', avcls: 'pc-av-c' },
   vpLevel:   { label: 'Vice Presidents',                cls: 'lv-v', avcls: 'pc-av-v' },
   directors: { label: 'Directors',                      cls: 'lv-d', avcls: 'pc-av-d' },
   managers:  { label: 'Managers & Team Leads',          cls: 'lv-m', avcls: 'pc-av-m' },
 };
 
+/* Department drill levels */
+const DEPT_LEVELS = {
+  deptHead:    { label: 'Department Head',   cls: 'lv-c', avcls: 'pc-av-c' },
+  seniorLevel: { label: 'Senior Level',      cls: 'lv-v', avcls: 'pc-av-v' },
+  midLevel:    { label: 'Mid Level',         cls: 'lv-d', avcls: 'pc-av-d' },
+  juniorLevel: { label: 'Junior / Associate',cls: 'lv-m', avcls: 'pc-av-m' },
+};
+
 function renderResults() {
   const m  = S.map;
   const co = S.co;
+  const isDept = m.mode === 'department';
+  const levels = isDept ? DEPT_LEVELS : FULL_LEVELS;
 
+  // Header
   document.getElementById('r-name').textContent = co.name;
-  document.getElementById('r-meta').textContent = [co.ind, co.size, co.hq].filter(Boolean).join(' · ');
+  document.getElementById('r-meta').textContent = isDept
+    ? `${co.ind} · ${co.dept} Department · ${co.size}${co.hq ? ' · ' + co.hq : ''}`
+    : `${co.ind} · Leadership Map · ${co.size}${co.hq ? ' · ' + co.hq : ''}`;
 
   let confirmed = 0;
-  Object.keys(LEVELS).forEach(k => confirmed += (m[k] || []).length);
+  Object.keys(levels).forEach(k => confirmed += (m[k] || []).length);
   document.getElementById('r-conf').textContent = confirmed;
   document.getElementById('r-unv').textContent  = (m.unverified || []).length;
+
+  // Mode badge
+  const modeBadge = isDept
+    ? `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:10px;background:rgba(0,180,166,0.12);color:var(--teal);font-size:11px;font-weight:700;margin-top:4px">🎯 Department Focus: ${co.dept}</span>`
+    : `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:10px;background:rgba(13,33,55,0.1);color:var(--navy);font-size:11px;font-weight:700;margin-top:4px">🏢 Leadership Map</span>`;
+  document.getElementById('r-meta').insertAdjacentHTML('afterend', modeBadge);
 
   // Org tree
   const orgOut = document.getElementById('org-output');
   orgOut.innerHTML = '';
-  Object.entries(LEVELS).forEach(([level, meta]) => {
+  Object.entries(levels).forEach(([level, meta]) => {
     const people = m[level] || [];
     if (!people.length) return;
     const sec = document.createElement('div');
@@ -446,7 +556,7 @@ function renderResults() {
     orgOut.appendChild(sec);
   });
 
-  // Unverified
+  // Unverified — now with LinkedIn links
   const uvOut = document.getElementById('uv-output');
   const uv    = m.unverified || [];
   uvOut.innerHTML = uv.length ? `
@@ -457,27 +567,44 @@ function renderResults() {
         <div class="uv-sub">${uv.length} entries · Needs manual review</div>
       </div>
       <table class="uv-table">
-        <thead><tr><th>Name</th><th>Possible Role</th><th>Confidence</th><th>Note</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Possible Role</th>
+            <th>Confidence</th>
+            <th>LinkedIn</th>
+            <th>Note</th>
+          </tr>
+        </thead>
         <tbody>
-          ${uv.map(p => `
-            <tr>
+          ${uv.map(p => {
+            const liHref = p.linkedin
+              ? (p.linkedin.startsWith('http') ? p.linkedin : 'https://' + p.linkedin)
+              : null;
+            return `<tr>
               <td><div class="uv-pname">${p.name}</div></td>
               <td><div class="uv-role">${p.title || '—'}</div></td>
               <td><span class="conf-pill">${p.confidence}%</span></td>
+              <td>${liHref ? `<a class="pc-link" href="${liHref}" target="_blank" rel="noopener" style="font-size:11px">in →</a>` : '<span style="color:var(--text3);font-size:12px">—</span>'}</td>
               <td><div class="uv-note">${p.note || '—'}</div></td>
-            </tr>`).join('')}
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
     </div>` : '';
 
   showView('results');
   setStep(3);
-  toast(`Talent map ready — ${confirmed} real profiles found`);
+
+  const modeLabel = isDept ? `${co.dept} department` : 'leadership';
+  toast(`Talent map ready — ${confirmed} real profiles found in ${modeLabel}`);
 }
 
 function profileCard(p, meta) {
   const init   = p.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
-  const liHref = p.linkedin.startsWith('http') ? p.linkedin : 'https://' + p.linkedin;
+  const liHref = p.linkedin
+    ? (p.linkedin.startsWith('http') ? p.linkedin : 'https://' + p.linkedin)
+    : null;
   return `
     <div class="profile-card ${meta.cls}">
       <div class="pc-top">
@@ -489,7 +616,9 @@ function profileCard(p, meta) {
       </div>
       <div class="pc-footer">
         <span class="pc-dept">${p.department || '—'}</span>
-        <a class="pc-link" href="${liHref}" target="_blank" rel="noopener">in →</a>
+        ${liHref
+          ? `<a class="pc-link" href="${liHref}" target="_blank" rel="noopener">in →</a>`
+          : `<span class="pc-link" style="opacity:0.35;cursor:default">in</span>`}
       </div>
     </div>`;
 }
@@ -497,56 +626,58 @@ function profileCard(p, meta) {
 /* ================================================================
    EXPORT
 ================================================================ */
+function getAllProfiles() {
+  const m   = S.map;
+  const all = [];
+  const isDept = m.mode === 'department';
+  const levels  = isDept
+    ? ['deptHead','seniorLevel','midLevel','juniorLevel']
+    : ['cSuite','vpLevel','directors','managers'];
+  const labels  = isDept
+    ? ['Dept Head','Senior','Mid','Junior']
+    : ['C-Suite','VP','Director','Manager'];
+
+  levels.forEach((k, i) =>
+    (m[k] || []).forEach(p => all.push({ ...p, level: labels[i] }))
+  );
+  (m.unverified || []).forEach(p => all.push({ ...p, level: 'Unverified' }));
+  return all;
+}
+
 function dlCSV() {
-  const m  = S.map;
-  const co = S.co;
+  const co   = S.co;
   const rows = ['Level,Name,Title,Department,LinkedIn,Confidence'];
-  const add  = (lv, arr) => (arr || []).forEach(p =>
-    rows.push(`"${lv}","${p.name}","${p.title}","${p.department || ''}","${p.linkedin || ''}","${p.confidence}%"`)
+  getAllProfiles().forEach(p =>
+    rows.push(`"${p.level}","${p.name}","${p.title||''}","${p.department||''}","${p.linkedin||''}","${p.confidence}%"`)
   );
-  add('C-Suite',    m.cSuite);
-  add('VP',         m.vpLevel);
-  add('Director',   m.directors);
-  add('Manager',    m.managers);
-  (m.unverified || []).forEach(p =>
-    rows.push(`"Unverified","${p.name}","${p.title || ''}","","","${p.confidence}%"`)
-  );
-  dl(rows.join('\n'), co.name.replace(/\s+/g, '_') + '_talent_map.csv', 'text/csv');
+  dl(rows.join('\n'), co.name.replace(/\s+/g,'_') + '_talent_map.csv', 'text/csv');
   toast('CSV downloaded');
 }
 
 function dlJSON() {
   dl(
     JSON.stringify({ company: S.co, generatedAt: new Date().toISOString(), map: S.map }, null, 2),
-    S.co.name.replace(/\s+/g, '_') + '_talent_map.json',
+    S.co.name.replace(/\s+/g,'_') + '_talent_map.json',
     'application/json'
   );
   toast('JSON downloaded');
 }
 
 function dlExcel() {
-  const m   = S.map;
   const co  = S.co;
-  const all = [
-    ...(m.cSuite    || []).map(p => ({ ...p, level: 'C-Suite'    })),
-    ...(m.vpLevel   || []).map(p => ({ ...p, level: 'VP'         })),
-    ...(m.directors || []).map(p => ({ ...p, level: 'Director'   })),
-    ...(m.managers  || []).map(p => ({ ...p, level: 'Manager'    })),
-    ...(m.unverified|| []).map(p => ({ ...p, level: 'Unverified', department: '—', linkedin: '—' })),
-  ];
-  const rows = all.map(p =>
-    `<tr><td>${p.level}</td><td>${p.name}</td><td>${p.title || ''}</td><td>${p.department || '—'}</td><td>${p.linkedin || '—'}</td><td>${p.confidence}%</td></tr>`
+  const rows = getAllProfiles().map(p =>
+    `<tr><td>${p.level}</td><td>${p.name}</td><td>${p.title||''}</td><td>${p.department||'—'}</td><td>${p.linkedin||'—'}</td><td>${p.confidence}%</td></tr>`
   ).join('');
   const html = `<html><head><meta charset="UTF-8"></head><body>
-    <h2>Talent Map: ${co.name}</h2>
-    <p>Industry: ${co.ind} | Size: ${co.size} | HQ: ${co.hq || '—'} | Generated: ${new Date().toLocaleDateString()}</p>
+    <h2>Talent Map: ${co.name}${co.dept ? ' — ' + co.dept + ' Dept' : ' — Leadership'}</h2>
+    <p>Industry: ${co.ind} | Size: ${co.size} | HQ: ${co.hq||'—'} | Generated: ${new Date().toLocaleDateString()}</p>
     <table border="1">
       <thead><tr><th>Level</th><th>Name</th><th>Title</th><th>Department</th><th>LinkedIn</th><th>Confidence</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <p style="color:gray;font-size:11px">Generated by AlphaMapping · alphanom.in</p>
   </body></html>`;
-  dl(html, co.name.replace(/\s+/g, '_') + '_talent_map.xls', 'application/vnd.ms-excel');
+  dl(html, co.name.replace(/\s+/g,'_') + '_talent_map.xls', 'application/vnd.ms-excel');
   toast('Excel file downloaded');
 }
 
