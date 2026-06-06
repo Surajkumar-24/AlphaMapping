@@ -8,7 +8,7 @@
    ============================================================ */
 
 const GROQ_API = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_KEY = 'YOUR_GROQ_API_KEY'; // ← your key from console.groq.com
+const GROQ_KEY = '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'; // ← your key from console.groq.com
 
 /* ── Limits ── */
 const MAX_QUERIES_FULL_MAP  = 8;   // leadership-only mode  → ~8 searches
