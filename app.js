@@ -17,7 +17,7 @@ const LARGE_COMPANY_SIZES   = ['Large (1000+)', 'Enterprise (5000+)'];
 const PROFILE_CAP           = 80;  // max profiles sent to Groq in one call
 
 /* ─── State ─── */
-let S = { user: null, paid: false, plan: 'starter', co: {}, map: null };
+let S = { user: null, paid: false, freeTrial: false, freeUsed: 0, plan: 'starter', co: {}, map: null };
 
 /* ================================================================
    UI HELPERS
@@ -162,6 +162,17 @@ function doPay() {
     showScreen('app'); setStep(1); showView('form');
     btn.textContent = 'Pay & Activate →'; btn.disabled = false;
   }, 1800);
+}
+
+
+/* ================================================================
+   FREE TRIAL — 1 search, no payment needed
+================================================================ */
+function doFreeTrial() {
+  S.freeTrial = true;
+  S.paid = false;
+  toast('Free trial activated — you have 1 free search 🎉');
+  showScreen('app'); setStep(1); showView('form');
 }
 
 /* ================================================================
@@ -436,6 +447,18 @@ async function startMapping() {
     );
   }
 
+  // ── Free trial gate ─────────────────────────────────────
+  if (!S.paid && S.freeTrial && S.freeUsed >= 1) {
+    toast('Your free search has been used. Please subscribe to continue.', 'error');
+    showScreen('pay');
+    return;
+  }
+  if (!S.paid && !S.freeTrial) {
+    toast('Please sign up or activate your free trial first.', 'error');
+    showScreen('pay');
+    return;
+  }
+
   showView('loading');
   setStep(2);
   document.getElementById('ld-title').textContent = dept
@@ -472,6 +495,7 @@ async function startMapping() {
 
     doneLoadSteps(6);
     S.map = structured;
+    if (S.freeTrial) S.freeUsed++;
 
     // Notify if results were capped
     if (structured._wasCapped) {
@@ -529,6 +553,7 @@ function renderResults() {
   Object.keys(levels).forEach(k => confirmed += (m[k] || []).length);
   document.getElementById('r-conf').textContent = confirmed;
   document.getElementById('r-unv').textContent  = (m.unverified || []).length;
+  document.getElementById('r-levels').textContent = Object.keys(levels).length;
 
   // Mode badge
   const modeBadge = isDept
@@ -595,6 +620,7 @@ function renderResults() {
 
   showView('results');
   setStep(3);
+  setTimeout(() => drawOrgChart(), 50);
 
   const modeLabel = isDept ? `${co.dept} department` : 'leadership';
   toast(`Talent map ready — ${confirmed} real profiles found in ${modeLabel}`);
@@ -679,6 +705,207 @@ function dlExcel() {
   </body></html>`;
   dl(html, co.name.replace(/\s+/g,'_') + '_talent_map.xls', 'application/vnd.ms-excel');
   toast('Excel file downloaded');
+}
+
+
+/* ================================================================
+   VISUAL ORG CHART — drawn on <canvas>
+================================================================ */
+
+const CHART_COLORS = {
+  lv0: { bg: '#00B4A6', text: '#fff', border: '#009688' }, // teal  — top level
+  lv1: { bg: '#0D2137', text: '#fff', border: '#1A3550' }, // navy  — second
+  lv2: { bg: '#4A6F90', text: '#fff', border: '#3A5A78' }, // mid   — third
+  lv3: { bg: '#8FA5BA', text: '#fff', border: '#7A92A8' }, // light — fourth
+  uv:  { bg: '#FEF3C7', text: '#92400E', border: '#FDE68A' }, // amber — unverified
+};
+
+function buildChartData() {
+  const m      = S.map;
+  const isDept = m.mode === 'department';
+  const keys   = isDept
+    ? ['deptHead','seniorLevel','midLevel','juniorLevel']
+    : ['cSuite','vpLevel','directors','managers'];
+  const labels = isDept
+    ? ['Department Head','Senior Level','Mid Level','Junior / Associate']
+    : ['C-Suite','Vice Presidents','Directors','Managers'];
+
+  const rows = [];
+  keys.forEach((k, i) => {
+    const people = m[k] || [];
+    if (people.length) rows.push({ label: labels[i], people, colorKey: 'lv' + i });
+  });
+  const uv = m.unverified || [];
+  if (uv.length) rows.push({ label: 'Unverified', people: uv, colorKey: 'uv' });
+  return rows;
+}
+
+function drawOrgChart() {
+  const canvas = document.getElementById('org-chart-canvas');
+  if (!canvas) return;
+
+  const rows     = buildChartData();
+  const co       = S.co;
+  const CARD_W   = 160;
+  const CARD_H   = 56;
+  const H_GAP    = 16;  // horizontal gap between cards
+  const V_GAP    = 48;  // vertical gap between rows
+  const PAD_X    = 40;
+  const PAD_Y    = 60;
+  const TITLE_H  = 50;
+
+  // Calculate canvas dimensions
+  const maxPerRow = Math.max(...rows.map(r => r.people.length));
+  const canvasW   = Math.max(700, maxPerRow * (CARD_W + H_GAP) + PAD_X * 2);
+  const canvasH   = PAD_Y + TITLE_H + rows.length * (CARD_H + V_GAP) + PAD_Y;
+
+  canvas.width  = canvasW;
+  canvas.height = canvasH;
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvasW, canvasH);
+
+  // Background
+  ctx.fillStyle = '#F0F4F8';
+  ctx.fillRect(0, 0, canvasW, canvasH);
+
+  // Title
+  ctx.fillStyle = '#0D2137';
+  ctx.font      = 'bold 16px DM Sans, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(co.name + (co.dept ? ' — ' + co.dept : ' — Leadership Map'), canvasW / 2, PAD_Y - 10);
+  ctx.font      = '12px DM Sans, sans-serif';
+  ctx.fillStyle = '#8FA5BA';
+  ctx.fillText('Generated by AlphaMapping · alphanom.in', canvasW / 2, PAD_Y + 10);
+
+  let currentY = PAD_Y + TITLE_H;
+
+  rows.forEach((row, rowIdx) => {
+    const color   = CHART_COLORS[row.colorKey] || CHART_COLORS.lv3;
+    const count   = row.people.length;
+    const rowW    = count * CARD_W + (count - 1) * H_GAP;
+    const startX  = (canvasW - rowW) / 2;
+
+    // Row label
+    ctx.fillStyle = '#8FA5BA';
+    ctx.font      = 'bold 10px DM Sans, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(row.label.toUpperCase(), PAD_X, currentY - 8);
+
+    // Connector line from previous row (skip first)
+    if (rowIdx > 0) {
+      ctx.strokeStyle = '#D5E1EC';
+      ctx.lineWidth   = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(canvasW / 2, currentY - V_GAP + CARD_H);
+      ctx.lineTo(canvasW / 2, currentY - 6);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    row.people.forEach((person, i) => {
+      const x = startX + i * (CARD_W + H_GAP);
+      const y = currentY;
+
+      // Card shadow
+      ctx.shadowColor   = 'rgba(13,33,55,0.10)';
+      ctx.shadowBlur    = 6;
+      ctx.shadowOffsetY = 2;
+
+      // Card background
+      ctx.fillStyle = color.bg;
+      roundRect(ctx, x, y, CARD_W, CARD_H, 8);
+      ctx.fill();
+
+      // Card border
+      ctx.shadowColor = 'transparent';
+      ctx.strokeStyle = color.border;
+      ctx.lineWidth   = 1.5;
+      roundRect(ctx, x, y, CARD_W, CARD_H, 8);
+      ctx.stroke();
+
+      // Avatar circle
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.beginPath();
+      ctx.arc(x + 26, y + CARD_H / 2, 16, 0, Math.PI * 2);
+      ctx.fill();
+
+      const initials = person.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+      ctx.fillStyle = color.text;
+      ctx.font      = 'bold 11px DM Sans, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(initials, x + 26, y + CARD_H / 2 + 4);
+
+      // Name
+      ctx.fillStyle = color.text;
+      ctx.font      = 'bold 11px DM Sans, sans-serif';
+      ctx.textAlign = 'left';
+      const maxNameW = CARD_W - 50;
+      const name     = truncateText(ctx, person.name, maxNameW);
+      ctx.fillText(name, x + 48, y + 20);
+
+      // Title
+      ctx.font      = '10px DM Sans, sans-serif';
+      ctx.fillStyle = color.text;
+      ctx.globalAlpha = 0.75;
+      const title   = truncateText(ctx, person.title || '', maxNameW);
+      ctx.fillText(title, x + 48, y + 35);
+      ctx.globalAlpha = 1;
+    });
+
+    currentY += CARD_H + V_GAP;
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function truncateText(ctx, text, maxW) {
+  if (!text) return '';
+  if (ctx.measureText(text).width <= maxW) return text;
+  let t = text;
+  while (ctx.measureText(t + '…').width > maxW && t.length > 0) t = t.slice(0, -1);
+  return t + '…';
+}
+
+function dlChartPNG() {
+  const canvas = document.getElementById('org-chart-canvas');
+  if (!canvas) return;
+  const a = document.createElement('a');
+  a.href     = canvas.toDataURL('image/png');
+  a.download = S.co.name.replace(/\s+/g, '_') + '_org_chart.png';
+  a.click();
+  toast('Chart PNG downloaded');
+}
+
+function dlChartJPEG() {
+  const canvas = document.getElementById('org-chart-canvas');
+  if (!canvas) return;
+  // JPEG needs white bg (transparent becomes black)
+  const offscreen = document.createElement('canvas');
+  offscreen.width  = canvas.width;
+  offscreen.height = canvas.height;
+  const ctx2 = offscreen.getContext('2d');
+  ctx2.fillStyle = '#F0F4F8';
+  ctx2.fillRect(0, 0, offscreen.width, offscreen.height);
+  ctx2.drawImage(canvas, 0, 0);
+  const a = document.createElement('a');
+  a.href     = offscreen.toDataURL('image/jpeg', 0.92);
+  a.download = S.co.name.replace(/\s+/g, '_') + '_org_chart.jpg';
+  a.click();
+  toast('Chart JPEG downloaded');
 }
 
 function dl(content, filename, mime) {
