@@ -8,7 +8,7 @@
    ============================================================ */
 
 const GROQ_API = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_KEY = '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'; // ← your key from console.groq.com
+const GROQ_KEY = 'YOUR_GROQ_API_KEY'; // ← your key from console.groq.com
 
 /* ── Limits ── */
 const MAX_QUERIES_FULL_MAP  = 8;   // leadership-only mode  → ~8 searches
@@ -56,13 +56,17 @@ function showView(v) {
 
 function goBack(v) { showView(v); setStep(v === 'form' ? 1 : 2); }
 
-function setStep(n) {
+function setStep(n, markDone) {
   for (let i = 1; i <= 3; i++) {
     const dot = document.getElementById('sd' + i);
     const lbl = document.getElementById('sl' + i);
-    if (i < n)        { dot.className = 'asb-dot done';    dot.innerHTML = '✓'; lbl.className = 'asb-label'; }
-    else if (i === n) { dot.className = 'asb-dot active';  dot.innerHTML = i;   lbl.className = 'asb-label active'; }
-    else              { dot.className = 'asb-dot pending'; dot.innerHTML = i;   lbl.className = 'asb-label'; }
+    if (i < n || (i === n && markDone)) {
+      dot.className = 'asb-dot done';    dot.innerHTML = '✓'; lbl.className = 'asb-label';
+    } else if (i === n) {
+      dot.className = 'asb-dot active';  dot.innerHTML = i;   lbl.className = 'asb-label active';
+    } else {
+      dot.className = 'asb-dot pending'; dot.innerHTML = i;   lbl.className = 'asb-label';
+    }
   }
 }
 
@@ -619,7 +623,7 @@ function renderResults() {
     </div>` : '';
 
   showView('results');
-  setStep(3);
+  setStep(3, true);  // true = mark step 3 green done
   setTimeout(() => drawOrgChart(), 50);
 
   const modeLabel = isDept ? `${co.dept} department` : 'leadership';
