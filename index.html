@@ -267,6 +267,8 @@
           </div>
         </div>
         <button class="btn-full" onclick="doPay()" id="pay-btn">Pay &amp; Activate &nbsp;→</button>
+        <div class="free-trial-divider"><span>or</span></div>
+        <button class="btn-free-trial" onclick="doFreeTrial()">Try free — 1 search, no card needed</button>
         <div class="pay-trust">🔒 Secured by Stripe &nbsp;·&nbsp; Cancel anytime &nbsp;·&nbsp; No hidden charges</div>
       </div>
     </div>
@@ -370,6 +372,8 @@
 
       <!-- VIEW: RESULTS -->
       <div id="view-results" style="display:none">
+
+        <!-- Toolbar -->
         <div class="results-toolbar">
           <button class="back-btn" onclick="goBack('form')">← New search</button>
           <div class="rt-right">
@@ -378,6 +382,14 @@
             <button class="btn-dl teal" onclick="dlExcel()">⬇ Excel</button>
           </div>
         </div>
+
+        <!-- Disclaimer banner -->
+        <div class="disclaimer-bar">
+          <span class="disclaimer-icon">ℹ️</span>
+          <span>Talent maps are generated from publicly available web data and may not be 100% accurate. Always verify profiles before outreach.</span>
+        </div>
+
+        <!-- Header stats -->
         <div class="results-header">
           <div class="rh-left">
             <div class="rh-eyebrow">Talent Map Complete</div>
@@ -387,17 +399,42 @@
           <div class="rh-stats">
             <div class="rh-stat"><div class="rh-num" id="r-conf">—</div><div class="rh-sl">Confirmed</div></div>
             <div class="rh-stat"><div class="rh-num" id="r-unv">—</div><div class="rh-sl">Unverified</div></div>
-            <div class="rh-stat"><div class="rh-num">4</div><div class="rh-sl">Org levels</div></div>
+            <div class="rh-stat"><div class="rh-num" id="r-levels">—</div><div class="rh-sl">Org levels</div></div>
           </div>
         </div>
+
+        <!-- Visual Org Chart -->
+        <div class="org-chart-card">
+          <div class="occ-header">
+            <div class="occ-title"><span>🗂</span> Visual Hierarchy</div>
+            <div class="occ-actions">
+              <button class="btn-dl" onclick="dlChartPNG()">⬇ PNG</button>
+              <button class="btn-dl" onclick="dlChartJPEG()">⬇ JPEG</button>
+            </div>
+          </div>
+          <div class="occ-scroll">
+            <canvas id="org-chart-canvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Profile cards -->
         <div id="org-output"></div>
         <div id="uv-output"></div>
+
+        <!-- Download bar -->
         <div class="dl-bar">
-          <span class="dl-label">📥 Export this talent map:</span>
+          <span class="dl-label">📥 Export talent map:</span>
           <button class="btn-dl" onclick="dlCSV()">⬇ CSV</button>
           <button class="btn-dl" onclick="dlJSON()">⬇ JSON</button>
+          <button class="btn-dl" onclick="dlChartPNG()">⬇ Chart PNG</button>
           <button class="btn-dl teal" onclick="dlExcel()">⬇ Excel Report</button>
         </div>
+
+        <!-- Footer disclaimer -->
+        <div class="disclaimer-footer">
+          ⚠️ AlphaMapping talent data is sourced from public web indexes and AI classification. Profiles may be outdated, misclassified, or belong to former employees. Use as a starting point — always verify independently before outreach.
+        </div>
+
       </div>
 
     </div>
