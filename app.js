@@ -6,7 +6,7 @@
 const GROQ_API = 'https://api.groq.com/openai/v1/chat/completions';
 
 // Only Groq key goes here — SERP_KEY lives in Vercel env vars, never in this file
-const GROQ_KEY = 'YOUR_GROQ_API_KEY'; // ← replace with your key from console.groq.com
+const GROQ_KEY = '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'; // ← replace with your key from console.groq.com
 
 /* ─── State ─── */
 let S = { user: null, paid: false, plan: 'starter', co: {}, map: null };
