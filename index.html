@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AlphaMapping — Competitor Talent Intelligence</title>
+  <meta name="description" content="Map competitor talent instantly. AI-powered org tree builder for recruitment agencies and freelance recruiters.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- TOPBAR -->
+  <header class="topbar" id="topbar">
+    <div class="logo-wrap">
+      <!-- AlphaNom parent logo -->
+      <a href="#" class="alphanom-logo">
+        <span class="logo-dot">•</span><span class="logo-alpha">Alpha</span><span class="logo-nom">NOM</span><span class="logo-badge-in">IN</span>
+      </a>
+      <span class="logo-divider"></span>
+      <!-- AlphaMapping sub-product -->
+      <a href="#" class="alphamapping-logo">
+        <span class="logo-alpha map-alpha">Alpha</span><span class="logo-mapping">MAPPING</span><span class="logo-badge-map">AI</span>
+      </a>
+    </div>
+    <nav class="topbar-nav" id="topbar-nav">
+      <a href="#how-it-works" class="nav-link">How it works</a>
+      <span class="nav-dot">•</span>
+      <a href="#pricing" class="nav-link">Pricing</a>
+      <span class="nav-dot">•</span>
+      <a href="#" class="nav-link" onclick="showScreen('auth','login');return false;">For Recruiters</a>
+    </nav>
+    <div class="topbar-right" id="topbar-right">
+      <button class="btn-outline-nav" onclick="showScreen('auth','login')">Log In</button>
+      <button class="btn-teal-nav" onclick="showScreen('auth','signup')">Sign Up &nbsp;›</button>
+    </div>
+  </header>
+
+  <!-- ======================== SCREENS ======================== -->
+
+  <!-- LANDING -->
+  <div class="screen active" id="screen-landing">
+    <section class="hero">
+      <div class="hero-inner">
+        <div class="hero-left">
+          <div class="hero-eyebrow"><span class="eyebrow-line"></span>AI TALENT INTELLIGENCE FOR RECRUITERS</div>
+          <h1 class="hero-h1">Map any company's<br>talent in <span class="h1-teal">minutes.</span></h1>
+          <p class="hero-desc">AlphaMapping scans LinkedIn and the web to build a complete org tree — names, designations, and profile links — for any competitor or target company.</p>
+          <div class="hero-ctas">
+            <button class="btn-hero-primary" onclick="showScreen('auth','signup')">Start Mapping Free &nbsp;→</button>
+            <button class="btn-hero-ghost" onclick="document.getElementById('how-it-works').scrollIntoView({behavior:'smooth'})">See how it works</button>
+          </div>
+          <div class="hero-trust">
+            <div class="trust-avatars">
+              <div class="ta ta1">JD</div><div class="ta ta2">AR</div><div class="ta ta3">MK</div><div class="ta ta4">SP</div>
+            </div>
+            <span class="trust-text">Trusted by <strong>500+</strong> recruitment agencies across India</span>
+          </div>
+        </div>
+        <div class="hero-right">
+          <div class="hero-card">
+            <div class="hc-header">
+              <div class="hc-dot teal"></div>
+              <div class="hc-title">Talent Map · Razorpay</div>
+              <div class="hc-badge">LIVE</div>
+            </div>
+            <div class="hc-row c-row">
+              <div class="hc-avatar av-c">VN</div>
+              <div class="hc-info"><div class="hc-name">Vikram Nair</div><div class="hc-role">CEO & Co-Founder</div></div>
+              <div class="hc-conf">96%</div>
+            </div>
+            <div class="hc-row">
+              <div class="hc-avatar av-v">PR</div>
+              <div class="hc-info"><div class="hc-name">Priya Rao</div><div class="hc-role">CTO</div></div>
+              <div class="hc-conf">93%</div>
+            </div>
+            <div class="hc-row">
+              <div class="hc-avatar av-d">AM</div>
+              <div class="hc-info"><div class="hc-name">Arjun Mehta</div><div class="hc-role">VP of Engineering</div></div>
+              <div class="hc-conf">87%</div>
+            </div>
+            <div class="hc-row">
+              <div class="hc-avatar av-d">DS</div>
+              <div class="hc-info"><div class="hc-name">Divya Sharma</div><div class="hc-role">VP of Product</div></div>
+              <div class="hc-conf">85%</div>
+            </div>
+            <div class="hc-row">
+              <div class="hc-avatar av-m">RG</div>
+              <div class="hc-info"><div class="hc-name">Rahul Gupta</div><div class="hc-role">Director, Sales</div></div>
+              <div class="hc-conf">79%</div>
+            </div>
+            <div class="hc-footer">
+              <span class="hc-stat"><strong>23</strong> profiles found</span>
+              <span class="hc-stat"><strong>4</strong> org levels</span>
+              <span class="hc-export">Export CSV ↓</span>
+            </div>
+          </div>
+          <div class="hero-pill">
+            <span class="hp-dot"></span> New map generated &nbsp;·&nbsp; <strong>Infosys BPM</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="hiw" id="how-it-works">
+      <div class="section-inner">
+        <div class="section-eyebrow"><span class="eyebrow-line"></span>HOW IT WORKS</div>
+        <h2 class="section-h2">Three steps to a complete org map</h2>
+        <div class="hiw-steps">
+          <div class="hiw-step">
+            <div class="hiw-num">01</div>
+            <div class="hiw-label">Enter company details</div>
+            <div class="hiw-desc">Name, industry, and a short description. That's all we need.</div>
+          </div>
+          <div class="hiw-arrow">→</div>
+          <div class="hiw-step">
+            <div class="hiw-num">02</div>
+            <div class="hiw-label">AI scans the web</div>
+            <div class="hiw-desc">Our agent runs X-ray searches across LinkedIn and public sources.</div>
+          </div>
+          <div class="hiw-arrow">→</div>
+          <div class="hiw-step">
+            <div class="hiw-num">03</div>
+            <div class="hiw-label">Get the talent map</div>
+            <div class="hiw-desc">Full org tree with names, titles, LinkedIn links, and confidence scores.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRICING -->
+    <section class="pricing" id="pricing">
+      <div class="section-inner">
+        <div class="section-eyebrow"><span class="eyebrow-line"></span>PRICING</div>
+        <h2 class="section-h2">Simple, transparent pricing</h2>
+        <div class="price-grid">
+          <div class="price-card">
+            <div class="pc-name">Starter</div>
+            <div class="pc-price">₹1,999<span>/mo</span></div>
+            <div class="pc-desc">For freelance recruiters</div>
+            <ul class="pc-features">
+              <li>5 talent maps / month</li>
+              <li>CSV & JSON export</li>
+              <li>Org tree visualization</li>
+              <li>Confidence scoring</li>
+            </ul>
+            <button class="btn-price-ghost" onclick="showScreen('auth','signup')">Get started →</button>
+          </div>
+          <div class="price-card featured">
+            <div class="pc-popular">MOST POPULAR</div>
+            <div class="pc-name">Pro</div>
+            <div class="pc-price">₹4,999<span>/mo</span></div>
+            <div class="pc-desc">For recruitment agencies</div>
+            <ul class="pc-features">
+              <li>Unlimited talent maps</li>
+              <li>CSV, JSON & Excel export</li>
+              <li>Full org tree + hierarchy</li>
+              <li>LinkedIn profile links</li>
+              <li>Priority support</li>
+            </ul>
+            <button class="btn-price-teal" onclick="showScreen('auth','signup')">Get started →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <div class="footer-logo">
+          <span class="logo-dot">•</span><span class="logo-alpha">Alpha</span><span class="logo-nom">NOM</span><span class="logo-badge-in">IN</span>
+          &nbsp;&nbsp;
+          <span class="logo-alpha map-alpha" style="font-size:15px">Alpha</span><span class="logo-mapping" style="font-size:13px">MAPPING</span>
+        </div>
+        <div class="footer-text">© 2025 AlphaNom Technologies. All rights reserved.</div>
+        <div class="footer-links">
+          <a href="#">Privacy</a><span>·</span><a href="#">Terms</a><span>·</span><a href="#">Support</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- AUTH -->
+  <div class="screen" id="screen-auth">
+    <div class="auth-wrap">
+      <div class="auth-card">
+        <a href="#" class="auth-back" onclick="showScreen('landing');return false;">← Back to home</a>
+        <div id="mode-login">
+          <div class="auth-eyebrow"><span class="eyebrow-line"></span>ALPHAMAPPING</div>
+          <h2 class="auth-title">Welcome back</h2>
+          <p class="auth-sub">Sign in to access talent intelligence.</p>
+          <div class="form-group">
+            <label class="form-label">Email address</label>
+            <input class="form-input" type="email" placeholder="you@agency.com" id="li-email">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input class="form-input" type="password" placeholder="••••••••" id="li-pass">
+          </div>
+          <button class="btn-full" onclick="doAuth('login')">Log In &nbsp;→</button>
+          <div class="auth-switch">New here? <a onclick="toggleMode('signup')">Create an account</a></div>
+        </div>
+        <div id="mode-signup" style="display:none">
+          <div class="auth-eyebrow"><span class="eyebrow-line"></span>GET STARTED</div>
+          <h2 class="auth-title">Create your account</h2>
+          <p class="auth-sub">Join 500+ recruiters using AlphaMapping.</p>
+          <div class="form-group">
+            <label class="form-label">Full name</label>
+            <input class="form-input" type="text" placeholder="Alex Morgan" id="su-name">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Work email</label>
+            <input class="form-input" type="email" placeholder="you@agency.com" id="su-email">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input class="form-input" type="password" placeholder="Min. 8 characters" id="su-pass">
+          </div>
+          <button class="btn-full" onclick="doAuth('signup')">Create Account &nbsp;→</button>
+          <div class="auth-switch">Already have an account? <a onclick="toggleMode('login')">Log in</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAYMENT -->
+  <div class="screen" id="screen-pay">
+    <div class="auth-wrap">
+      <div class="auth-card" style="max-width:480px">
+        <div class="auth-eyebrow"><span class="eyebrow-line"></span>UNLOCK ALPHAMAPPING</div>
+        <h2 class="auth-title">Choose a plan</h2>
+        <p class="auth-sub">Get instant access to competitor talent maps.</p>
+        <div class="plan-grid">
+          <div class="plan-card sel" id="plan-starter" onclick="selPlan('starter')">
+            <div class="plan-name">Starter</div>
+            <div class="plan-price">₹1,999<span>/mo</span></div>
+            <div class="plan-desc">5 maps/month</div>
+          </div>
+          <div class="plan-card" id="plan-pro" onclick="selPlan('pro')">
+            <div class="plan-pop">POPULAR</div>
+            <div class="plan-name">Pro</div>
+            <div class="plan-price">₹4,999<span>/mo</span></div>
+            <div class="plan-desc">Unlimited maps</div>
+          </div>
+        </div>
+        <div class="feat-list">
+          <div class="feat-item"><span class="feat-check">✓</span>AI-powered X-ray talent search</div>
+          <div class="feat-item"><span class="feat-check">✓</span>Org tree with full hierarchy</div>
+          <div class="feat-item"><span class="feat-check">✓</span>LinkedIn profile links</div>
+          <div class="feat-item"><span class="feat-check">✓</span>CSV, JSON &amp; Excel export</div>
+          <div class="feat-item"><span class="feat-check">✓</span>Confidence score on every profile</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Card Number</label>
+          <input class="form-input" type="text" placeholder="4242 4242 4242 4242" maxlength="19" id="c-num" oninput="fmtCard(this)">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Expiry</label>
+            <input class="form-input" type="text" placeholder="MM / YY" maxlength="7" id="c-exp">
+          </div>
+          <div class="form-group">
+            <label class="form-label">CVC</label>
+            <input class="form-input" type="text" placeholder="•••" maxlength="3" id="c-cvc">
+          </div>
+        </div>
+        <button class="btn-full" onclick="doPay()" id="pay-btn">Pay &amp; Activate &nbsp;→</button>
+        <div class="pay-trust">🔒 Secured by Stripe &nbsp;·&nbsp; Cancel anytime &nbsp;·&nbsp; No hidden charges</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div class="screen" id="screen-app">
+    <div class="app-wrap">
+
+      <div class="app-step-bar" id="step-bar">
+        <div class="asb-item">
+          <div class="asb-dot active" id="sd1">1</div>
+          <div class="asb-label active" id="sl1">Company Details</div>
+        </div>
+        <div class="asb-line"></div>
+        <div class="asb-item">
+          <div class="asb-dot pending" id="sd2">2</div>
+          <div class="asb-label" id="sl2">AI Scanning</div>
+        </div>
+        <div class="asb-line"></div>
+        <div class="asb-item">
+          <div class="asb-dot pending" id="sd3">3</div>
+          <div class="asb-label" id="sl3">Talent Map</div>
+        </div>
+      </div>
+
+      <!-- VIEW: FORM -->
+      <div id="view-form">
+        <div class="form-card">
+          <div class="form-card-eyebrow"><span class="eyebrow-line"></span>TALENT INTELLIGENCE</div>
+          <h2 class="form-card-title">Enter company details</h2>
+          <p class="form-card-sub">Our AI agent will scan LinkedIn and the web to build a complete org picture with names, designations and profile links.</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Company Name <span class="req">*</span></label>
+              <input class="form-input" type="text" placeholder="e.g. Razorpay" id="co-name">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Industry <span class="req">*</span></label>
+              <select class="form-select" id="co-ind">
+                <option value="">Select industry...</option>
+                <option>Fintech</option><option>SaaS / Software</option>
+                <option>E-Commerce &amp; Retail</option><option>Healthcare &amp; MedTech</option>
+                <option>EdTech</option><option>AI &amp; Machine Learning</option>
+                <option>Cybersecurity</option><option>HR &amp; Recruitment Tech</option>
+                <option>Logistics &amp; Supply Chain</option><option>Marketing &amp; AdTech</option>
+                <option>Manufacturing</option><option>BFSI</option><option>Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Company Size</label>
+              <select class="form-select" id="co-size">
+                <option>Startup (1–50)</option><option>Small (51–200)</option>
+                <option selected>Mid-size (201–1000)</option>
+                <option>Large (1000+)</option><option>Enterprise (5000+)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Headquarters</label>
+              <input class="form-input" type="text" placeholder="e.g. Bengaluru, India" id="co-hq">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Company Description <span class="req">*</span></label>
+            <textarea class="form-textarea" id="co-desc" placeholder="Describe what the company does, their core products/services, target customers, and market position. (5–7 lines gives the best results)"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Focus Departments <span class="optional">(optional)</span></label>
+            <input class="form-input" type="text" placeholder="e.g. Engineering, Product, Sales — leave blank for full org map" id="co-dept">
+          </div>
+          <div class="form-action-row">
+            <span class="req-note"><span class="req">*</span> Required fields</span>
+            <button class="btn-generate" onclick="startMapping()">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              Generate Talent Map
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW: LOADING -->
+      <div id="view-loading" style="display:none">
+        <button class="back-btn" onclick="goBack('form')">← Back</button>
+        <div class="loading-card">
+          <div class="teal-ring"></div>
+          <div class="ld-title" id="ld-title">Scanning talent...</div>
+          <div class="ld-sub" id="ld-sub">Initialising AI agent</div>
+          <div class="prog-wrap"><div class="prog-fill" id="ld-bar" style="width:4%"></div></div>
+          <div class="ld-steps">
+            <div class="ld-step active" id="ls0"><div class="ld-sicon" id="li0">1</div>Generating X-ray search strings</div>
+            <div class="ld-step" id="ls1"><div class="ld-sicon" id="li1">2</div>Scanning LinkedIn profiles &amp; web sources</div>
+            <div class="ld-step" id="ls2"><div class="ld-sicon" id="li2">3</div>Extracting employee data</div>
+            <div class="ld-step" id="ls3"><div class="ld-sicon" id="li3">4</div>Building org hierarchy</div>
+            <div class="ld-step" id="ls4"><div class="ld-sicon" id="li4">5</div>Scoring profile confidence</div>
+            <div class="ld-step" id="ls5"><div class="ld-sicon" id="li5">6</div>Rendering talent map</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW: RESULTS -->
+      <div id="view-results" style="display:none">
+        <div class="results-toolbar">
+          <button class="back-btn" onclick="goBack('form')">← New search</button>
+          <div class="rt-right">
+            <button class="btn-dl" onclick="dlCSV()">⬇ CSV</button>
+            <button class="btn-dl" onclick="dlJSON()">⬇ JSON</button>
+            <button class="btn-dl teal" onclick="dlExcel()">⬇ Excel</button>
+          </div>
+        </div>
+        <div class="results-header">
+          <div class="rh-left">
+            <div class="rh-eyebrow">Talent Map Complete</div>
+            <div class="rh-company" id="r-name">—</div>
+            <div class="rh-meta" id="r-meta">—</div>
+          </div>
+          <div class="rh-stats">
+            <div class="rh-stat"><div class="rh-num" id="r-conf">—</div><div class="rh-sl">Confirmed</div></div>
+            <div class="rh-stat"><div class="rh-num" id="r-unv">—</div><div class="rh-sl">Unverified</div></div>
+            <div class="rh-stat"><div class="rh-num">4</div><div class="rh-sl">Org levels</div></div>
+          </div>
+        </div>
+        <div id="org-output"></div>
+        <div id="uv-output"></div>
+        <div class="dl-bar">
+          <span class="dl-label">📥 Export this talent map:</span>
+          <button class="btn-dl" onclick="dlCSV()">⬇ CSV</button>
+          <button class="btn-dl" onclick="dlJSON()">⬇ JSON</button>
+          <button class="btn-dl teal" onclick="dlExcel()">⬇ Excel Report</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="toast-wrap"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
