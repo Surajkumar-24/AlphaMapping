@@ -7,8 +7,8 @@
    4. Large company cap (500+ employees) with user notice
    ============================================================ */
 
-const GROQ_API = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_KEY = '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'; // ← your key from console.groq.com
+// API keys live ONLY in Vercel environment variables, never in this file.
+// app.js calls serverless proxies: /api/serp (Serper) and /api/groq (Groq).
 
 /* ── Limits ── */
 const MAX_QUERIES_FULL_MAP  = 8;   // leadership-only mode  → ~8 searches
@@ -407,21 +407,16 @@ Return ONLY raw JSON, no markdown:
 }`;
   }
 
-  const res = await fetch(GROQ_API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + GROQ_KEY },
-    body: JSON.stringify({
-      model:       'llama-3.3-70b-versatile',
-      messages:    [{ role: 'user', content: prompt }],
-      max_tokens:  3500,
-      temperature: 0.1,
-    }),
+  const res = await fetch('/api/groq', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ prompt }),
   });
 
   const data = await res.json();
-  if (data.error) throw new Error('Groq error: ' + data.error.message);
+  if (!res.ok || data.error) throw new Error('Groq error: ' + (data.error || res.status));
 
-  let raw = data.choices?.[0]?.message?.content || '{}';
+  let raw = data.content || '{}';
   raw = raw.replace(/```json|```/g, '').trim();
   const result = JSON.parse(raw);
   result._wasCapped = wasCapped;
